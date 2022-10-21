@@ -5,11 +5,14 @@ import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import zerobase.weather.weatherDiary.WeatherDiaryApplication;
 import zerobase.weather.weatherDiary.entity.DateWeather;
 import zerobase.weather.weatherDiary.entity.Diary;
 import zerobase.weather.weatherDiary.repository.DateWeatherRepository;
@@ -33,15 +36,18 @@ public class DiaryService {
     private String apiKey;
     private final DiaryRepository diaryRepository;
     private final DateWeatherRepository dateWeatherRepository;
+    private static final Logger logger = LoggerFactory.getLogger(WeatherDiaryApplication.class);
 
     @Transactional
     @Scheduled(cron = "0 0 1 * * *") // 매일 새벽 1시마다
-    public void saveWeatherDate () {
+    public void saveWeatherDate() {
+        logger.info("오늘도 날짜 데이터 잘 가져옴");
         dateWeatherRepository.save(getWeatherFromApi());
     }
 
     @Transactional(isolation = Isolation.SERIALIZABLE)
     public void createDiary(LocalDate date, String text) {
+        logger.info("started to create diary");
         // 날씨 데이터 가져오기 (db에 이미 저장된 정보 가져오기)
         DateWeather dateWeather = getDateWeather(date);
         Diary nowDiary = new Diary();
@@ -49,15 +55,18 @@ public class DiaryService {
         nowDiary.setText(text);
 
         diaryRepository.save(nowDiary);
+        logger.info("end to create diary");
     }
-    private DateWeather getDateWeather (LocalDate date) {
+
+    private DateWeather getDateWeather(LocalDate date) {
         List<DateWeather> dateWeatherList = dateWeatherRepository.findAllByDate(date);
-        if(dateWeatherList.size() == 0) {
+        if (dateWeatherList.size() == 0) {
             return getWeatherFromApi();
         }
         return dateWeatherList.get(0);
     }
-    private DateWeather getWeatherFromApi () {
+
+    private DateWeather getWeatherFromApi() {
         // open weather map 에서 날씨 데이터 가져오기
         String weatherData = getWeatherString();
 
@@ -74,7 +83,7 @@ public class DiaryService {
     }
 
     private String getWeatherString() {
-        String apiUrl = "https://api.openweathermap.org/data/2.5/weather?q=seoul&appid="+apiKey;
+        String apiUrl = "https://api.openweathermap.org/data/2.5/weather?q=seoul&appid=" + apiKey;
 
         try {
             URL url = new URL(apiUrl);
@@ -84,14 +93,14 @@ public class DiaryService {
 
             BufferedReader br;
 
-            if(responseCode == 200) {
+            if (responseCode == 200) {
                 br = new BufferedReader(new InputStreamReader(connection.getInputStream()));
             } else {
                 br = new BufferedReader(new InputStreamReader(connection.getErrorStream()));
             }
             String inputLine;
             StringBuilder response = new StringBuilder();
-            while((inputLine = br.readLine()) != null) {
+            while ((inputLine = br.readLine()) != null) {
                 response.append(inputLine);
             }
             br.close();
@@ -102,7 +111,8 @@ public class DiaryService {
             return "failed to get response";
         }
     }
-    private Map<String, Object> parseWeather (String jsonString) {
+
+    private Map<String, Object> parseWeather(String jsonString) {
         JSONParser jsonParser = new JSONParser();
         JSONObject jsonObject;
 
@@ -121,8 +131,15 @@ public class DiaryService {
 
         return resultMap;
     }
+
     @Transactional(readOnly = true)
     public List<Diary> readDiary(LocalDate date) {
+        logger.debug("start read diary");
+/*
+        if (date.isAfter(LocalDate.ofYearDay(3050, 1))) {
+            throw new InvalidDate();
+        }
+*/
         return diaryRepository.findAllByDate(date);
     }
 
